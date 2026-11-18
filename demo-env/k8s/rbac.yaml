@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: opspilot-agent-sa
+  namespace: opspilot-demo
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: opspilot-readonly-role
+  namespace: opspilot-demo
+rules:
+  # Pod inspection and log retrieval
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/status"]
+    verbs: ["get", "list", "watch"]
+
+  # Cluster warning and incident events
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+
+  # Deployment rollout inspection
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/status", "replicasets"]
+    verbs: ["get", "list", "watch"]
+
+  # ConfigMaps & Services inspection (read-only)
+  - apiGroups: [""]
+    resources: ["services", "configmaps"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: opspilot-readonly-binding
+  namespace: opspilot-demo
+subjects:
+  - kind: ServiceAccount
+    name: opspilot-agent-sa
+    namespace: opspilot-demo
+roleRef:
+  kind: Role
+  name: opspilot-readonly-role
+  apiGroup: rbac.authorization.k8s.io

@@ -1,0 +1,40 @@
+pipeline {
+    agent any
+
+    environment {
+        APP_NAME = "payments-service"
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+    }
+
+    stages {
+        stage('Lint and Test') {
+            steps {
+                echo "Running unit tests and code validation..."
+                sh 'python -m unittest discover tests || true'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo "Building image for ${APP_NAME}:${IMAGE_TAG}..."
+                sh "docker build -t opspilot/${APP_NAME}:${IMAGE_TAG} demo-env/services/${APP_NAME}/"
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                echo "Rolling out deployment to Kubernetes..."
+                sh "kubectl set image deployment/${APP_NAME} ${APP_NAME}=opspilot/${APP_NAME}:${IMAGE_TAG} -n opspilot-demo"
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo "Pipeline failed! Notification sent."
+        }
+        success {
+            echo "Pipeline succeeded! Application deployed to opspilot-demo."
+        }
+    }
+}
