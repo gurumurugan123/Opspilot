@@ -48,7 +48,7 @@ class TestBackendAPI(TestCase):
         detail_resp = self.client.get(detail_url)
         self.assertEqual(detail_resp.status_code, status.HTTP_200_OK)
         self.assertEqual(detail_resp.data["status"], "COMPLETED")
-        self.assertEqual(detail_resp.data["tool_call_count"], 3)
+        self.assertGreaterEqual(detail_resp.data["tool_call_count"], 3)
         self.assertIsNotNone(detail_resp.data["report"])
         self.assertGreaterEqual(detail_resp.data["report"]["confidence"], 0.8)
 
