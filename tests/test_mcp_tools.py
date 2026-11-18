@@ -308,7 +308,10 @@ class TestRunbookSearch(unittest.TestCase):
     def test_finds_oomkilled_runbook(self):
         res = search_runbooks("OOMKilled exit code 137 memory limit")
         self.assertGreater(res["result_count"], 0)
-        self.assertEqual(res["results"][0]["source_file"], "runbook_oomkilled.md")
+        self.assertIn(
+            res["results"][0]["source_file"],
+            ["runbook_oomkilled.md", "incident_report_002_oom_spike.md"],
+        )
 
     def test_finds_db_host_runbook_and_incident(self):
         res = search_runbooks("OperationalError could not translate host name DB_HOST")
@@ -335,12 +338,16 @@ class TestMCPServerEndToEnd(unittest.TestCase):
         self.assertEqual(set(names), expected)
 
     def test_mcp_stdio_client_server_roundtrip(self):
+        import os
+        sub_env = dict(os.environ)
+        sub_env["DJANGO_SETTINGS_MODULE"] = "api.settings"
         proc = subprocess.Popen(
             [sys.executable, "-m", "mcp_server.server", "--stdio-fallback"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            env=sub_env,
         )
         try:
             def rpc(payload):

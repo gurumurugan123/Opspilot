@@ -107,3 +107,17 @@ def run_investigation_task(self, investigation_id: str):
             inv.current_hypothesis = f"Investigation aborted due to error: {str(exc)}"
             inv.save()
         raise
+
+
+@app.task(name="workers.tasks.ingest_runbooks_task")
+def ingest_runbooks_task(runbooks_dir: str = None):
+    """
+    Background worker task: Ingests all markdown runbooks and incident reports,
+    splits by headings, computes embeddings, and stores in the database.
+    """
+    import django
+    django.setup()
+    from rag.ingest import ingest_runbooks_sync
+
+    count = ingest_runbooks_sync(runbooks_dir=runbooks_dir)
+    return {"status": "SUCCESS", "chunks_indexed": count}
