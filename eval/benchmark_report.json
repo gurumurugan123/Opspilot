@@ -1,10 +1,10 @@
 {
-  "benchmark_timestamp": "2026-11-19T15:15:46Z",
+  "benchmark_timestamp": "2026-11-19T16:09:28Z",
   "total_scenarios": 12,
   "accuracy_rate_pct": 100.0,
   "citation_rate_pct": 100.0,
   "avg_tool_calls": 5.7,
-  "avg_latency_ms": 14.0,
+  "avg_latency_ms": 18.7,
   "avg_confidence": 0.92,
   "total_cost_usd": 0.0271,
   "target_accuracy_pct": 80.0,
@@ -24,7 +24,7 @@
       "suggested_fix": "Verify required environment variables (e.g. DB_PASSWORD, SECRET_KEY) in Secret/ConfigMap, correct missing keys, and restart rollout.",
       "confidence": 0.92,
       "tool_call_count": 6,
-      "duration_ms": 24.82,
+      "duration_ms": 26.94,
       "estimated_tokens": 1170,
       "estimated_cost_usd": 0.00234
     },
@@ -42,7 +42,7 @@
       "suggested_fix": "Increase container memory limit in deployment manifest (e.g. `limits.memory: 512Mi`) and verify application memory leak buffers.",
       "confidence": 0.95,
       "tool_call_count": 6,
-      "duration_ms": 10.08,
+      "duration_ms": 18.13,
       "estimated_tokens": 1170,
       "estimated_cost_usd": 0.00234
     },
@@ -59,7 +59,7 @@
       "suggested_fix": "Correct the invalid container image tag in deployment or rollback to the previous known good revision: `kubectl rollout undo deployment/<service>`.",
       "confidence": 0.95,
       "tool_call_count": 6,
-      "duration_ms": 11.07,
+      "duration_ms": 17.1,
       "estimated_tokens": 1170,
       "estimated_cost_usd": 0.00234
     },
@@ -77,7 +77,7 @@
       "suggested_fix": "Correct DB_HOST in the service ConfigMap to point to the active internal PostgreSQL Service ('postgres') and trigger a rollout restart.",
       "confidence": 0.94,
       "tool_call_count": 6,
-      "duration_ms": 19.59,
+      "duration_ms": 14.29,
       "estimated_tokens": 1170,
       "estimated_cost_usd": 0.00234
     },
@@ -95,7 +95,7 @@
       "suggested_fix": "Verify REDIS_HOST and REDIS_PORT configuration, confirm the redis pod is running, and restore network connectivity.",
       "confidence": 0.95,
       "tool_call_count": 6,
-      "duration_ms": 13.52,
+      "duration_ms": 22.62,
       "estimated_tokens": 1170,
       "estimated_cost_usd": 0.00234
     },
@@ -113,7 +113,7 @@
       "suggested_fix": "Investigate failing /health/ probe endpoint dependencies and verify the probe port matches the container listening port.",
       "confidence": 0.9,
       "tool_call_count": 6,
-      "duration_ms": 15.25,
+      "duration_ms": 17.55,
       "estimated_tokens": 1170,
       "estimated_cost_usd": 0.00234
     },
@@ -131,7 +131,7 @@
       "suggested_fix": "Increase DOWNSTREAM_TIMEOUT window in ConfigMap and scale downstream service replicas to mitigate request queuing.",
       "confidence": 0.82,
       "tool_call_count": 6,
-      "duration_ms": 10.35,
+      "duration_ms": 20.27,
       "estimated_tokens": 1170,
       "estimated_cost_usd": 0.00234
     },
@@ -148,7 +148,7 @@
       "suggested_fix": "Inspect failing pod logs, verify environment variables and database connectivity, and restart rollout if needed.",
       "confidence": 0.82,
       "tool_call_count": 6,
-      "duration_ms": 10.31,
+      "duration_ms": 19.1,
       "estimated_tokens": 1170,
       "estimated_cost_usd": 0.00234
     },
@@ -166,7 +166,7 @@
       "suggested_fix": "Verify required environment variables (e.g. DB_PASSWORD, SECRET_KEY) in Secret/ConfigMap, correct missing keys, and restart rollout.",
       "confidence": 0.92,
       "tool_call_count": 6,
-      "duration_ms": 12.52,
+      "duration_ms": 20.05,
       "estimated_tokens": 1170,
       "estimated_cost_usd": 0.00234
     },
@@ -184,7 +184,7 @@
       "suggested_fix": "Inspect failing test assertion or container registry credentials in Jenkins console log and push fix.",
       "confidence": 0.94,
       "tool_call_count": 4,
-      "duration_ms": 15.79,
+      "duration_ms": 15.05,
       "estimated_tokens": 930,
       "estimated_cost_usd": 0.00186
     },
@@ -202,7 +202,7 @@
       "suggested_fix": "Inspect failing test assertion or container registry credentials in Jenkins console log and push fix.",
       "confidence": 0.95,
       "tool_call_count": 4,
-      "duration_ms": 11.52,
+      "duration_ms": 16.21,
       "estimated_tokens": 930,
       "estimated_cost_usd": 0.00186
     },
@@ -219,7 +219,7 @@
       "suggested_fix": "Verify required environment variables (e.g. DB_PASSWORD, SECRET_KEY) in Secret/ConfigMap, correct missing keys, and restart rollout.",
       "confidence": 0.92,
       "tool_call_count": 6,
-      "duration_ms": 13.54,
+      "duration_ms": 16.97,
       "estimated_tokens": 1170,
       "estimated_cost_usd": 0.00234
     }
