@@ -1,0 +1,148 @@
+version: '3.8'
+
+services:
+  # 1. PostgreSQL Database (PostgreSQL 16)
+  postgres:
+    image: postgres:16-alpine
+    container_name: opspilot-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: opspilot
+      POSTGRES_USER: opspilot
+      POSTGRES_PASSWORD: opspilot_secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opspilot -d opspilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Redis Cache & Celery Task Broker
+  redis:
+    image: redis:7-alpine
+    container_name: opspilot-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 3. OpsPilot Core Backend & SRE Web Dashboard
+  opspilot-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opspilot-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DJANGO_SETTINGS_MODULE=api.settings
+      - DB_HOST=postgres
+      - DB_NAME=opspilot
+      - DB_USER=opspilot
+      - DB_PASSWORD=opspilot_secret
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py ingest_runbooks &&
+             gunicorn --bind 0.0.0.0:8000 --workers 3 api.wsgi:application"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/metrics/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # 4. OpsPilot Celery Background Worker (LangGraph Multi-Agent Engine)
+  opspilot-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opspilot-worker
+    restart: unless-stopped
+    environment:
+      - DJANGO_SETTINGS_MODULE=api.settings
+      - DB_HOST=postgres
+      - DB_NAME=opspilot
+      - DB_USER=opspilot
+      - DB_PASSWORD=opspilot_secret
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    command: celery -A workers.tasks worker -l info --concurrency 2
+    depends_on:
+      opspilot-api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # 5. Demo Orders Microservice (DRF)
+  demo-orders:
+    build:
+      context: ./demo-env/services/orders
+      dockerfile: Dockerfile
+    container_name: opspilot-demo-orders
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      - DB_HOST=postgres
+      - DB_NAME=opspilot
+      - DB_USER=opspilot
+      - DB_PASSWORD=opspilot_secret
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # 6. Demo Payments Microservice (DRF)
+  demo-payments:
+    build:
+      context: ./demo-env/services/payments
+      dockerfile: Dockerfile
+    container_name: opspilot-demo-payments
+    restart: unless-stopped
+    ports:
+      - "8002:8000"
+    environment:
+      - DB_HOST=postgres
+      - DB_NAME=opspilot
+      - DB_USER=opspilot
+      - DB_PASSWORD=opspilot_secret
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # 7. Demo Inventory Microservice (DRF + Redis)
+  demo-inventory:
+    build:
+      context: ./demo-env/services/inventory
+      dockerfile: Dockerfile
+    container_name: opspilot-demo-inventory
+    restart: unless-stopped
+    ports:
+      - "8003:8000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

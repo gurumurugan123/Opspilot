@@ -1,0 +1,21 @@
+# Docker Ignore for OpsPilot
+.git
+.gitignore
+.venv
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.sqlite3
+*.sqlite3-journal
+.env
+.idea/
+.vscode/
+*.log
+.coverage
+htmlcov/
+eval/benchmark_report.json
+eval/benchmark_summary.md
