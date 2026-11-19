@@ -29,6 +29,8 @@ class Investigation(models.Model):
 
     # Human-in-the-loop Ticket Approval Gate
     ticket_approved = models.BooleanField(default=False)
+    ticket_approved_by = models.CharField(max_length=128, blank=True, default="")
+    ticket_approved_at = models.DateTimeField(blank=True, null=True)
     ticket_created = models.BooleanField(default=False)
     ticket_url = models.URLField(blank=True, null=True)
 

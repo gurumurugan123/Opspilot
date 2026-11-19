@@ -8,6 +8,8 @@ while guaranteeing that critical ERROR / Exception / Traceback lines are never l
 import re
 from typing import List
 
+from mcp_server.security import sanitize_untrusted_log_content
+
 ERROR_PATTERN = re.compile(
     r"(?i)\b(ERROR|CRITICAL|FATAL|Exception|Traceback|OOMKilled|ConnectionError|"
     r"OperationalError|KeyError|TimeoutError|Connection refused|FAILED|panic)\b"
@@ -72,5 +74,7 @@ def wrap_untrusted_log(content: str, source: str) -> str:
     """
     Wrap external log text in explicit untrusted delimiters so downstream LLMs
     treat log lines strictly as data, never as executable instructions.
+    Neutralizes any prompt injection payloads detected inside log lines.
     """
-    return f'<untrusted_log source="{source}">\n{content}\n</untrusted_log>'
+    sanitized = sanitize_untrusted_log_content(content)
+    return f'<untrusted_log source="{source}">\n{sanitized}\n</untrusted_log>'

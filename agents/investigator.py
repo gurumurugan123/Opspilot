@@ -14,6 +14,7 @@ import time
 from typing import Any, Dict, List
 
 from agents.state import IncidentState
+from mcp_server.security import detect_prompt_injection
 from mcp_server.server import dispatch_tool_call
 
 
@@ -133,9 +134,15 @@ def investigator_node(state: IncidentState) -> Dict[str, Any]:
         logs_resp = _safe_call_tool("get_pod_logs", {"pod": failing_pod, "namespace": namespace, "tail_lines": 50}, inv_id)
         tool_count += 1
         raw_logs = logs_resp.get("logs", "")
-        # Extract prominent error lines
+        # Extract prominent error lines, neutralizing prompt injection payloads
         for line in raw_logs.splitlines():
             line_lower = line.lower()
+            if detect_prompt_injection(line):
+                new_evidence.append({
+                    "source": f"k8s:{failing_pod}/security",
+                    "finding": f"Adversarial prompt injection attempt detected and neutralized in container logs: {line.strip()[:100]}",
+                })
+                continue
             if any(err_kw in line_lower for err_kw in (
                 "error", "exception", "keyerror", "connection refused", "connectionerror",
                 "operationalerror", "fatal", "timeout", "critical", "fail"

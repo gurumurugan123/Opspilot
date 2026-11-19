@@ -10,6 +10,7 @@ Acts as the Quality Gate:
 from typing import Any, Dict
 from agents.schemas import ReviewOutput
 from agents.state import IncidentState
+from mcp_server.security import detect_prompt_injection
 
 
 def reviewer_node(state: IncidentState) -> Dict[str, Any]:
@@ -23,6 +24,15 @@ def reviewer_node(state: IncidentState) -> Dict[str, Any]:
 
     evidence_corpus = " ".join([item.get("finding", "") for item in evidence_items]).lower()
     hypo_lower = hypothesis.lower()
+
+    # Rule 0: Reject prompt injection or unauthorized instruction overrides
+    if detect_prompt_injection(hypothesis):
+        return {
+            "confidence": 0.10,
+            "is_approved": False,
+            "reviewer_notes": "Rejected: Hypothesis contains adversarial prompt injection attempt.",
+            "iteration_count": iteration + 1,
+        }
 
     # Rule 1: Check if hypothesis keywords have direct supporting citations
     is_substantiated = False

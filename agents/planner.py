@@ -5,6 +5,7 @@ Planner Agent Node for OpsPilot LangGraph Workflow (Phase 5).
 from typing import Dict, Any
 from agents.schemas import PlanOutput
 from agents.state import IncidentState
+from mcp_server.security import sanitize_user_input
 
 
 def planner_node(state: IncidentState) -> Dict[str, Any]:
@@ -12,7 +13,7 @@ def planner_node(state: IncidentState) -> Dict[str, Any]:
     Evaluates the incident query/alert and establishes the diagnostic plan.
     Prioritizes high-level namespace sweeps before deep log dives.
     """
-    question = state.get("question", "")
+    question = sanitize_user_input(state.get("question", ""))
     service_hint = state.get("service_hint")
 
     plan_steps = [

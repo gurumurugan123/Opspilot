@@ -46,7 +46,7 @@ REDACTION_RULES: List[Tuple[re.Pattern, str]] = [
     # 5. Generic key=value or key: value secret assignments
     (
         re.compile(
-            r"(?i)\b((?:db_)?password|passwd|pwd|secret(?:_key)?|api_?key|access_?token|auth_?token|private_?key|client_secret|jenkins_token)\b"
+            r"(?i)\b((?:db_)?pass(?:word)?|passwd|pwd|secret(?:_key)?|api_?key|access_?token|auth_?token|private_?key|client_secret|jenkins_token)\b"
             r"(\s*[:=]\s*['\"]?)([^'\"\s,;}\]]+)(['\"]?)"
         ),
         r"\1\2[REDACTED_SECRET]\4",

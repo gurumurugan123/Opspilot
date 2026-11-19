@@ -25,6 +25,7 @@ import sys
 from typing import Any, Callable, Dict, List
 
 from mcp_server.redaction import redact_data, redact_text
+from mcp_server.security import SecurityViolationError, validate_tool_call
 from mcp_server.tools.jenkins import (
     get_build_changes,
     get_jenkins_build_log,
@@ -214,6 +215,9 @@ def list_tool_schemas() -> List[Dict[str, Any]]:
 
 def dispatch_tool_call(tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     """Execute a registered read-only tool safely with argument validation and redaction."""
+    # Enforce read-only whitelist and injection check
+    validate_tool_call(tool_name, arguments)
+
     handler = TOOL_HANDLERS.get(tool_name)
     if handler is None:
         raise KeyError(f"Unknown tool: {tool_name}")
@@ -262,6 +266,12 @@ def _handle_jsonrpc_message(req: Dict[str, Any]) -> Dict[str, Any] | None:
                     "content": [{"type": "text", "text": json.dumps(output, indent=2)}],
                     "isError": False,
                 },
+            }
+        except SecurityViolationError as exc:
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {"code": -32601, "message": str(exc)},
             }
         except KeyError as exc:
             return {

@@ -13,6 +13,7 @@ Endpoints:
 
 from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -123,6 +124,8 @@ def investigation_detail(request, pk):
             "status": inv.status,
             "current_hypothesis": inv.current_hypothesis,
             "ticket_approved": inv.ticket_approved,
+            "ticket_approved_by": inv.ticket_approved_by,
+            "ticket_approved_at": inv.ticket_approved_at.isoformat() if inv.ticket_approved_at else None,
             "ticket_url": inv.ticket_url,
             "tool_call_count": len(tool_calls),
             "tool_calls": tool_calls,
@@ -162,7 +165,22 @@ def approve_ticket(request, pk):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    if inv.ticket_approved:
+        return Response(
+            {
+                "error": "Ticket has already been approved for this investigation.",
+                "ticket_url": inv.ticket_url,
+                "approved_by": inv.ticket_approved_by,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    approved_by = request.data.get("approved_by") or (
+        request.user.username if getattr(request, "user", None) and request.user.is_authenticated else "sre-oncall"
+    )
     inv.ticket_approved = True
+    inv.ticket_approved_by = approved_by
+    inv.ticket_approved_at = timezone.now()
     inv.ticket_created = True
     inv.ticket_url = f"https://github.com/gurumurugan123/Opspilot/issues/{str(inv.id)[:8]}"
     inv.save()
@@ -171,6 +189,8 @@ def approve_ticket(request, pk):
         {
             "investigation_id": str(inv.id),
             "ticket_approved": True,
+            "ticket_approved_by": inv.ticket_approved_by,
+            "ticket_approved_at": inv.ticket_approved_at.isoformat(),
             "ticket_created": True,
             "ticket_url": inv.ticket_url,
             "message": "Incident ticket approved and created successfully.",
