@@ -7,13 +7,20 @@ from django.urls import path
 from api.views import (
     alerts_webhook,
     approve_ticket,
+    dashboard_view,
     investigation_detail,
     investigation_stream,
     investigations_collection,
+    metrics_view,
     submit_feedback,
 )
 
 urlpatterns = [
+    # SRE Incident Dashboard Web UI (Phase 8)
+    path("", dashboard_view, name="dashboard"),
+    path("dashboard/", dashboard_view, name="dashboard-alt"),
+    # Prometheus Metrics Exposition
+    path("api/metrics/", metrics_view, name="metrics"),
     path("admin/", admin.site.urls),
     # Investigations API
     path("api/investigations/", investigations_collection, name="investigations-collection"),

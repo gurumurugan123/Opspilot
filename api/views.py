@@ -11,8 +11,9 @@ Endpoints:
   - POST /api/alerts/webhook/          : Ingest incident alert from Alertmanager or webhook
 """
 
-from django.http import StreamingHttpResponse
-from django.shortcuts import get_object_or_404
+import time
+from django.http import HttpResponse, StreamingHttpResponse
+from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
@@ -259,3 +260,61 @@ def alerts_webhook(request):
         },
         status=status.HTTP_202_ACCEPTED,
     )
+
+
+START_TIME = time.time()
+
+
+def dashboard_view(request):
+    """
+    Renders the interactive OpsPilot SRE Incident Dashboard (Phase 8).
+    """
+    return render(request, "dashboard.html")
+
+
+def metrics_view(request):
+    """
+    Prometheus-compatible metrics exposition endpoint (/api/metrics/).
+    """
+    from django.db.models import Count
+
+    lines = [
+        "# HELP opspilot_uptime_seconds Process uptime in seconds",
+        "# TYPE opspilot_uptime_seconds gauge",
+        f"opspilot_uptime_seconds {round(time.time() - START_TIME, 2)}",
+        "",
+        "# HELP opspilot_investigations_total Total number of investigations by status",
+        "# TYPE opspilot_investigations_total counter",
+    ]
+
+    status_counts = dict(Investigation.objects.values_list("status").annotate(count=Count("status")))
+    for st_choice in Investigation.Status.values:
+        cnt = status_counts.get(st_choice, 0)
+        lines.append(f'opspilot_investigations_total{{status="{st_choice}"}} {cnt}')
+
+    lines.extend([
+        "",
+        "# HELP opspilot_ticket_approvals_total Total incident tickets approved through HITL gate",
+        "# TYPE opspilot_ticket_approvals_total counter",
+        f'opspilot_ticket_approvals_total {Investigation.objects.filter(ticket_approved=True).count()}',
+        "",
+        "# HELP opspilot_tool_calls_total Total tool calls dispatched by diagnostic tool name",
+        "# TYPE opspilot_tool_calls_total counter",
+    ])
+
+    tool_counts = dict(ToolCall.objects.values_list("tool_name").annotate(count=Count("tool_name")))
+    if not tool_counts:
+        lines.append('opspilot_tool_calls_total{tool="none"} 0')
+    else:
+        for tool, cnt in sorted(tool_counts.items()):
+            lines.append(f'opspilot_tool_calls_total{{tool="{tool}"}} {cnt}')
+
+    lines.extend([
+        "",
+        "# HELP opspilot_feedback_total Total human SRE feedback submissions",
+        "# TYPE opspilot_feedback_total counter",
+        f'opspilot_feedback_total{{correct="true"}} {Feedback.objects.filter(is_correct=True).count()}',
+        f'opspilot_feedback_total{{correct="false"}} {Feedback.objects.filter(is_correct=False).count()}',
+    ])
+
+    return HttpResponse("\n".join(lines) + "\n", content_type="text/plain; version=0.0.4; charset=utf-8")
