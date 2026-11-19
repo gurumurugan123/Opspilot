@@ -94,6 +94,15 @@ def reviewer_node(state: IncidentState) -> Dict[str, Any]:
             critique = "Readiness failure suspected but probe status not documented in evidence."
             recommended_checks.append("Call describe_pod to inspect readinessProbe status")
 
+    elif "jenkins" in hypo_lower or "build" in hypo_lower or "pipeline" in hypo_lower:
+        if "jenkins" in evidence_corpus or "build" in evidence_corpus or "failed" in evidence_corpus or "commit" in evidence_corpus:
+            is_substantiated = True
+            confidence = 0.94
+            critique = "Hypothesis confirmed: Jenkins CI build logs and commit change diff confirm failure reason."
+        else:
+            critique = "Build failure suspected but not confirmed in Jenkins logs."
+            recommended_checks.append("Call get_jenkins_build_log to inspect console output")
+
     else:
         # General case: check if at least one solid evidence item exists
         if len(evidence_items) >= 2:

@@ -27,6 +27,8 @@ def _determine_fix(root_cause: str) -> str:
         return "Investigate failing /health/ probe endpoint dependencies and verify the probe port matches the container listening port."
     if "timeout" in rc_lower:
         return "Increase DOWNSTREAM_TIMEOUT window in ConfigMap and scale downstream service replicas to mitigate request queuing."
+    if "jenkins" in rc_lower or "build" in rc_lower:
+        return "Inspect failing test assertion or container registry credentials in Jenkins console log and push fix."
     return "Inspect failing pod logs, verify environment variables and database connectivity, and restart rollout if needed."
 
 

@@ -62,104 +62,151 @@ def investigator_node(state: IncidentState) -> Dict[str, Any]:
     failing_pod = state.get("focus_pod")
     symptoms: List[str] = []
 
-    # Check 1: Pod sweep (if not already done)
-    if tool_count < max_tool_budget and not state.get("evidence"):
-        pods_resp = _safe_call_tool("list_pods", {"namespace": namespace}, inv_id)
-        tool_count += 1
-        pods = pods_resp.get("pods", [])
-        new_evidence.append({
-            "source": f"k8s:{namespace}/pods",
-            "finding": f"Inspected {len(pods)} pods in namespace '{namespace}'.",
-        })
+    q_text = (state.get("question") or "").lower()
+    is_jenkins = any(k in q_text for k in ("jenkins", "build", "pipeline", "ci/cd", "ci-cd"))
+    job_name = state.get("service_hint") or "orders-build"
 
-        for p in pods:
-            status = p.get("status", "")
-            ready = p.get("ready", "1/1")
-            restarts = p.get("restarts", 0)
-            if status not in ("Running", "Completed") or ready.startswith("0/") or restarts > 0:
-                failing_pod = p.get("name")
-                symptoms.append(f"Pod {failing_pod} status={status}, ready={ready}, restarts={restarts}")
-                new_evidence.append({
-                    "source": f"k8s:{namespace}/{failing_pod}",
-                    "finding": f"Detected degraded pod: status={status}, ready={ready}, restarts={restarts}",
-                })
-                break
-
-        # If all pods are superficially Running, infer focus pod from service_hint or question
-        if not failing_pod:
-            hint = (state.get("service_hint") or "").lower()
-            q_text = state.get("question", "").lower()
-            for p in pods:
-                p_name = p.get("name", "").lower()
-                base_name = p_name.split("-")[0]
-                if (hint and hint in p_name) or (base_name and base_name in q_text):
-                    failing_pod = p.get("name")
+    if is_jenkins:
+        # Check Jenkins Builds
+        if tool_count < max_tool_budget:
+            builds_resp = _safe_call_tool("get_jenkins_builds", {"job": job_name, "limit": 5}, inv_id)
+            tool_count += 1
+            builds = builds_resp.get("builds", [])
+            target_build = 1
+            for b in builds:
+                if b.get("result") in ("FAILURE", "UNSTABLE"):
+                    target_build = b.get("number", 1)
                     new_evidence.append({
-                        "source": f"k8s:{namespace}/{failing_pod}",
-                        "finding": f"Focusing log inspection on {failing_pod} based on incident query.",
+                        "source": f"jenkins:{job_name}/#{target_build}",
+                        "finding": f"Jenkins job '{job_name}' build #{target_build} status: {b.get('result')}",
                     })
                     break
 
-    # Check 2: Recent cluster events
-    if tool_count < max_tool_budget:
-        events_resp = _safe_call_tool("get_k8s_events", {"namespace": namespace, "since_minutes": 30}, inv_id)
-        tool_count += 1
-        events = events_resp.get("events", [])
-        warnings = [e for e in events if e.get("type") == "Warning"]
-        if warnings:
-            top_warn = warnings[0]
-            warn_msg = f"Cluster Warning: {top_warn.get('reason')} on {top_warn.get('object')}: {top_warn.get('message')}"
-            symptoms.append(warn_msg)
-            new_evidence.append({"source": f"k8s:events/{top_warn.get('object')}", "finding": warn_msg})
+            if tool_count < max_tool_budget:
+                log_resp = _safe_call_tool("get_jenkins_build_log", {"job": job_name, "build_number": target_build}, inv_id)
+                tool_count += 1
+                j_log = log_resp.get("log", "")
+                for line in j_log.splitlines():
+                    if detect_prompt_injection(line):
+                        continue
+                    line_lower = line.lower()
+                    if any(kw in line_lower for kw in ("fail", "error", "denied", "unauthorized", "assertionerror", "exception")):
+                        symptoms.append(line.strip())
+                        new_evidence.append({
+                            "source": f"jenkins:{job_name}/#{target_build}/console",
+                            "finding": line.strip()[:140],
+                        })
+                        break
 
-    # Check 3: Detailed Pod Description (exit code, termination reasons, limits)
-    if failing_pod and tool_count < max_tool_budget:
-        desc_resp = _safe_call_tool("describe_pod", {"pod": failing_pod, "namespace": namespace}, inv_id)
-        tool_count += 1
-        containers = desc_resp.get("containers", [])
-        if containers:
-            c0 = containers[0]
-            term = c0.get("last_termination")
-            if term:
-                term_msg = f"Last termination: Reason={term.get('reason')}, ExitCode={term.get('exit_code')}, Message={term.get('message')}"
-                symptoms.append(term_msg)
-                new_evidence.append({"source": f"k8s:{failing_pod}/termination", "finding": term_msg})
-            waiting = c0.get("current_state", {}).get("reason")
-            if waiting:
-                symptoms.append(f"Container waiting state: {waiting}")
-                new_evidence.append({"source": f"k8s:{failing_pod}/state", "finding": f"Container waiting: {waiting}"})
+            if tool_count < max_tool_budget:
+                changes_resp = _safe_call_tool("get_build_changes", {"job": job_name, "build_number": target_build}, inv_id)
+                tool_count += 1
+                changes = changes_resp.get("changes", [])
+                if changes:
+                    c0 = changes[0]
+                    new_evidence.append({
+                        "source": f"jenkins:{job_name}/changes",
+                        "finding": f"Commit '{c0.get('message', '').strip()}' by {c0.get('author')}",
+                    })
+    else:
+        # Check 1: Pod sweep (if not already done)
+        if tool_count < max_tool_budget and not state.get("evidence"):
+            pods_resp = _safe_call_tool("list_pods", {"namespace": namespace}, inv_id)
+            tool_count += 1
+            pods = pods_resp.get("pods", [])
+            new_evidence.append({
+                "source": f"k8s:{namespace}/pods",
+                "finding": f"Inspected {len(pods)} pods in namespace '{namespace}'.",
+            })
 
-    # Check 4: Container Logs for the degraded pod
-    if failing_pod and tool_count < max_tool_budget:
-        logs_resp = _safe_call_tool("get_pod_logs", {"pod": failing_pod, "namespace": namespace, "tail_lines": 50}, inv_id)
-        tool_count += 1
-        raw_logs = logs_resp.get("logs", "")
-        # Extract prominent error lines, neutralizing prompt injection payloads
-        for line in raw_logs.splitlines():
-            line_lower = line.lower()
-            if detect_prompt_injection(line):
-                new_evidence.append({
-                    "source": f"k8s:{failing_pod}/security",
-                    "finding": f"Adversarial prompt injection attempt detected and neutralized in container logs: {line.strip()[:100]}",
-                })
-                continue
-            if any(err_kw in line_lower for err_kw in (
-                "error", "exception", "keyerror", "connection refused", "connectionerror",
-                "operationalerror", "fatal", "timeout", "critical", "fail"
-            )):
-                symptoms.append(line.strip())
-                new_evidence.append({"source": f"k8s:{failing_pod}/logs", "finding": line.strip()})
-                break
+            for p in pods:
+                status = p.get("status", "")
+                ready = p.get("ready", "1/1")
+                restarts = p.get("restarts", 0)
+                if status not in ("Running", "Completed") or ready.startswith("0/") or restarts > 0:
+                    failing_pod = p.get("name")
+                    symptoms.append(f"Pod {failing_pod} status={status}, ready={ready}, restarts={restarts}")
+                    new_evidence.append({
+                        "source": f"k8s:{namespace}/{failing_pod}",
+                        "finding": f"Detected degraded pod: status={status}, ready={ready}, restarts={restarts}",
+                    })
+                    break
 
-    # Check 5: Recent Deployments check
-    if tool_count < max_tool_budget:
-        dep_resp = _safe_call_tool("get_recent_deployments", {"namespace": namespace}, inv_id)
-        tool_count += 1
-        deps = dep_resp.get("deployments", [])
-        for dep in deps:
-            if dep.get("unavailable_replicas", 0) > 0:
-                dep_msg = f"Deployment {dep.get('name')} revision {dep.get('revision')} has {dep.get('unavailable_replicas')} unavailable replicas."
-                new_evidence.append({"source": f"k8s:deployment/{dep.get('name')}", "finding": dep_msg})
+            # If all pods are superficially Running, infer focus pod from service_hint or question
+            if not failing_pod:
+                hint = (state.get("service_hint") or "").lower()
+                q_text = state.get("question", "").lower()
+                for p in pods:
+                    p_name = p.get("name", "").lower()
+                    base_name = p_name.split("-")[0]
+                    if (hint and hint in p_name) or (base_name and base_name in q_text):
+                        failing_pod = p.get("name")
+                        new_evidence.append({
+                            "source": f"k8s:{namespace}/{failing_pod}",
+                            "finding": f"Focusing log inspection on {failing_pod} based on incident query.",
+                        })
+                        break
+
+        # Check 2: Recent cluster events
+        if tool_count < max_tool_budget:
+            events_resp = _safe_call_tool("get_k8s_events", {"namespace": namespace, "since_minutes": 30}, inv_id)
+            tool_count += 1
+            events = events_resp.get("events", [])
+            warnings = [e for e in events if e.get("type") == "Warning"]
+            if warnings:
+                top_warn = warnings[0]
+                warn_msg = f"Cluster Warning: {top_warn.get('reason')} on {top_warn.get('object')}: {top_warn.get('message')}"
+                symptoms.append(warn_msg)
+                new_evidence.append({"source": f"k8s:events/{top_warn.get('object')}", "finding": warn_msg})
+
+        # Check 3: Detailed Pod Description (exit code, termination reasons, limits)
+        if failing_pod and tool_count < max_tool_budget:
+            desc_resp = _safe_call_tool("describe_pod", {"pod": failing_pod, "namespace": namespace}, inv_id)
+            tool_count += 1
+            containers = desc_resp.get("containers", [])
+            if containers:
+                c0 = containers[0]
+                term = c0.get("last_termination")
+                if term:
+                    term_msg = f"Last termination: Reason={term.get('reason')}, ExitCode={term.get('exit_code')}, Message={term.get('message')}"
+                    symptoms.append(term_msg)
+                    new_evidence.append({"source": f"k8s:{failing_pod}/termination", "finding": term_msg})
+                waiting = c0.get("current_state", {}).get("reason")
+                if waiting:
+                    symptoms.append(f"Container waiting state: {waiting}")
+                    new_evidence.append({"source": f"k8s:{failing_pod}/state", "finding": f"Container waiting: {waiting}"})
+
+        # Check 4: Container Logs for the degraded pod
+        if failing_pod and tool_count < max_tool_budget:
+            logs_resp = _safe_call_tool("get_pod_logs", {"pod": failing_pod, "namespace": namespace, "tail_lines": 50}, inv_id)
+            tool_count += 1
+            raw_logs = logs_resp.get("logs", "")
+            # Extract prominent error lines, neutralizing prompt injection payloads
+            for line in raw_logs.splitlines():
+                line_lower = line.lower()
+                if detect_prompt_injection(line):
+                    new_evidence.append({
+                        "source": f"k8s:{failing_pod}/security",
+                        "finding": f"Adversarial prompt injection attempt detected and neutralized in container logs: {line.strip()[:100]}",
+                    })
+                    continue
+                if any(err_kw in line_lower for err_kw in (
+                    "error", "exception", "keyerror", "connection refused", "connectionerror",
+                    "operationalerror", "fatal", "timeout", "critical", "fail", "throttle", "throttled"
+                )):
+                    symptoms.append(line.strip())
+                    new_evidence.append({"source": f"k8s:{failing_pod}/logs", "finding": line.strip()})
+                    break
+
+        # Check 5: Recent Deployments check
+        if tool_count < max_tool_budget:
+            dep_resp = _safe_call_tool("get_recent_deployments", {"namespace": namespace}, inv_id)
+            tool_count += 1
+            deps = dep_resp.get("deployments", [])
+            for dep in deps:
+                if dep.get("unavailable_replicas", 0) > 0:
+                    dep_msg = f"Deployment {dep.get('name')} revision {dep.get('revision')} has {dep.get('unavailable_replicas')} unavailable replicas."
+                    new_evidence.append({"source": f"k8s:deployment/{dep.get('name')}", "finding": dep_msg})
 
     # Check 6: Hybrid RAG Search over Runbooks & Past Postmortems
     symptom_query = " ".join(symptoms)[:200] or state.get("question", "")
@@ -178,7 +225,12 @@ def investigator_node(state: IncidentState) -> Dict[str, Any]:
     evidence_text = " ".join([e["finding"] for e in new_evidence])
     ev_lower = evidence_text.lower()
 
-    if "oomkilled" in ev_lower or "137" in ev_lower or ("exceeded" in ev_lower and "memory" in ev_lower):
+    if is_jenkins:
+        if "denied" in ev_lower or "unauthorized" in ev_lower or "docker" in ev_lower:
+            hypothesis = f"Jenkins CI build failed during Docker image push due to unauthorized registry credentials."
+        else:
+            hypothesis = f"Jenkins CI build failed due to unit test assertions or compilation failure in {job_name}."
+    elif "oomkilled" in ev_lower or "137" in ev_lower or ("exceeded" in ev_lower and "memory" in ev_lower):
         hypothesis = f"Pod {failing_pod or 'service'} was OOMKilled (exit code 137) after exceeding its configured memory limit."
     elif "crashloopbackoff" in ev_lower or "exit_code=1" in ev_lower or "keyerror" in ev_lower:
         hypothesis = f"Pod {failing_pod or 'service'} is crashing on startup in CrashLoopBackOff due to a missing environment variable or configuration error."
