@@ -1,0 +1,48 @@
+pipeline {
+    agent any
+
+    environment {
+        SERVICE_NAME = "orders-service"
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+        OPSPILOT_WEBHOOK = "http://opspilot-core:8000/api/alerts/webhook/"
+    }
+
+    stages {
+        stage('Unit Tests') {
+            steps {
+                echo "Running unit tests for orders-service..."
+                sh 'python manage.py test orders_app'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo "Building Docker image opspilot/orders-service:${IMAGE_TAG}..."
+                sh "docker build -t opspilot/orders-service:${IMAGE_TAG} ."
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                echo "Deploying orders-service:${IMAGE_TAG} to opspilot-demo namespace..."
+                sh "kubectl set image deployment/orders-service orders-service=opspilot/orders-service:${IMAGE_TAG} -n opspilot-demo"
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo "Build failed! Notifying OpsPilot autonomous SRE agent..."
+            httpRequest(
+                url: "${env.OPSPILOT_WEBHOOK}",
+                httpMode: 'POST',
+                contentType: 'APPLICATION_JSON',
+                requestBody: """{
+                    "alertname": "JenkinsBuildFailure",
+                    "summary": "Build #${env.BUILD_NUMBER} failed in stage ${env.STAGE_NAME}",
+                    "service": "orders-service"
+                }"""
+            )
+        }
+    }
+}
