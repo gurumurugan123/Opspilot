@@ -76,6 +76,9 @@ else:
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "opspilot_backend.sqlite3",
+            "OPTIONS": {
+                "timeout": 30,
+            },
         }
     }
 
@@ -87,6 +90,9 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "UTC"
+CELERY_TASK_PUBLISH_RETRY = False
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = False
+CELERY_BROKER_CONNECTION_TIMEOUT = 0.2
 
 # CORS configuration for UI frontend
 CORS_ALLOW_ALL_ORIGINS = True
